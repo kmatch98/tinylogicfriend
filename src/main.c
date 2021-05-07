@@ -36,10 +36,11 @@
 #include "logic_capture.h"
 #include "instrument_constants.h"
 #include "tlf_board.h"
+#include "neopixel.h"
 
 uint16_t data_requested, data_send_complete; // state variables
 uint16_t send_buffer_counter=0;
-int send_buffer_times_called=0;
+// int send_buffer_times_called=0;
 
 uint16_t tlf_output_buffer[TLF_DATA_BUFFER_LENGTH*4]; // Data output buffer
 
@@ -71,11 +72,17 @@ int main(void)
   static bool led_state = true;
 
   board_init();
+  // system_init();
+
   tusb_init();
   board_led_write(led_state);
 
   scpi_init();
   logic_capture_init();
+
+#ifdef BOARD_NEOPIXEL_PIN
+  RGBLED_set_color(0x110000);
+#endif
 
   while (1)
   {
@@ -131,6 +138,10 @@ void flag_data_requested(void) {
   // initialize state variables to send data
   data_requested = 1;
   data_send_complete = 0;
+
+#ifdef BOARD_NEOPIXEL_PIN
+  RGBLED_set_color(0x000000);
+#endif
 }
 
 int tlf_fifo_task(void) {
@@ -144,6 +155,12 @@ int tlf_fifo_task(void) {
       // board_led_write(0);
   }
 
+#ifdef BOARD_NEOPIXEL_PIN
+  if (data_send_complete > 0) {
+    RGBLED_set_color(0x110000);
+  }
+#endif
+
   return 0;
 }
 
@@ -153,7 +170,9 @@ void tlf_send_buffer(void) {
   uint16_t j=0; // loop counter for putting measurement data into output buffer
   uint16_t values_to_send = 0;
 
-  send_buffer_times_called++;
+#ifdef BOARD_NEOPIXEL_PIN
+  RGBLED_set_color(0x000055);
+#endif
 
   for (j=0; j < TLF_DATA_BUFFER_LENGTH; j++) {
 
@@ -168,12 +187,26 @@ void tlf_send_buffer(void) {
 
     if ( tud_usbtmc_transmit_dev_msg_data(tlf_output_buffer, values_to_send*4, false, false) ) { // correct count for the size of the uint16_t, in bytes
     }
+
     send_buffer_counter += values_to_send;
 
+#ifdef BOARD_NEOPIXEL_PIN
+    RGBLED_set_color(0x000000);
+
+    if (send_buffer_counter >= samples)  {
+      RGBLED_set_color(0x110000);
+    }
+#endif
+
+
+
   } else {
-    if ( tud_usbtmc_transmit_dev_msg_data(EOM_message, 0, true, false) ) {
-      data_send_complete = 1;
-    } // no data to send. Send End Of Message signal
+    data_send_complete = 1;
+    tud_usbtmc_transmit_dev_msg_data(EOM_message, 0, true, false);
+
+#ifdef BOARD_NEOPIXEL_PIN
+    RGBLED_set_color(0x110000);
+#endif
 
   }
 
@@ -200,7 +233,7 @@ void led_blinking_task(void)
     if(doPulse)
     {
       led_state = true;
-      board_led_write(true);
+      // board_led_write(true);
       start_ms = board_millis();
       doPulse = false;
     }
@@ -211,7 +244,7 @@ void led_blinking_task(void)
         return; // not enough time
       }
       led_state = false;
-      board_led_write(false);
+      // board_led_write(false);
     }
   }
   else
@@ -220,7 +253,7 @@ void led_blinking_task(void)
     if ( board_millis() - start_ms < blink_interval_ms) return; // not enough time
     start_ms += blink_interval_ms;
 
-    board_led_write(led_state);
+    // board_led_write(led_state);
     led_state = 1 - led_state; // toggle
   }
 }

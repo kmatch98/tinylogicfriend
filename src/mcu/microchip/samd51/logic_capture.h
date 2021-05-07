@@ -25,8 +25,6 @@
 
 #include <stdint.h>
 
-
-
 void logic_capture_init(void);
 void logic_capture_start(void);
 void logic_capture_stop(void);
@@ -49,8 +47,9 @@ typedef struct _capture_channel {
 
 extern capture_channel_t channel_list[];
 
-#define MEASURE_BUFFER_SIZE 35000
 extern uint16_t timestamps[];
 extern uint16_t values[];
 
 extern uint16_t send_buffer_counter;
+
+extern bool RLE_mode; // boolean to identify whether board runs in Run Length Encoding (RLE) or not (CLOCK)

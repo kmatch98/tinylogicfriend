@@ -354,6 +354,8 @@ static scpi_result_t SAMPLES_Set(scpi_t * context) { // set the number of sample
 
     scpi_number_t param1;
 
+    // board_led_write(0); // * for debug
+
     /* read first parameter if present */
     if (!SCPI_ParamNumber(context, scpi_special_numbers_def, &param1, TRUE)) {
         return SCPI_RES_ERR;
@@ -383,6 +385,21 @@ static scpi_result_t SAMPLES_Max_Get(scpi_t * context) { // Get the number of sa
     return SCPI_RES_OK;
 }
 
+// get whether the data is returned in Run-Length-Encoded Tuples (16-bit timestamp, 16-bit value)
+// or in pure samples (16-bit value only)
+static scpi_result_t MODE_Get(scpi_t * context) {
+
+    if (RLE_mode) {
+        SCPI_ResultCharacters(context, "RLE", 3); // decode to the string
+        fprintf(stderr, "Mode: Run-Length-Encoded (RLE)");
+        return SCPI_RES_OK;
+    }
+
+    SCPI_ResultCharacters(context, "CLOCK", 5); // decode to the string
+        fprintf(stderr, "Mode: Sampling (CLOCK)");
+        return SCPI_RES_OK;
+}
+
 // send a data packet
 static scpi_result_t DATA_Request(scpi_t * context) {
     (void) context;
@@ -395,8 +412,10 @@ static scpi_result_t DATA_Request(scpi_t * context) {
 // start the acquisition
 static scpi_result_t RUN_Execute(scpi_t * context) {
     (void) context;
-    // board_led_write(0); // * for debug
+    board_led_write(0); // * for debug
 
+    flag_reset_send_buffer_counter(); // reset the counter, indicating that no data has been sent from the current buffer
+    // board_led_write(0);
     logic_capture_start(); // call the board specific function
 
     return SCPI_RES_OK;
@@ -405,9 +424,10 @@ static scpi_result_t RUN_Execute(scpi_t * context) {
 // stop the acquisition and clean up
 static scpi_result_t STOP_Execute(scpi_t * context) {
     (void) context;
-
-    logic_capture_stop(); // call the board specific function
-
+    if (running) {
+        logic_capture_stop(); // call the board specific function
+    }
+    flag_reset_send_buffer_counter(); // reset the counter, indicating that no data has been sent from the current buffer
     return SCPI_RES_OK;
 }
 
@@ -473,6 +493,9 @@ const scpi_command_t scpi_commands[] = {
     {.pattern = "SAMPLes", .callback = SAMPLES_Set,},
     {.pattern = "SAMPLes?", .callback = SAMPLES_Get,},
     {.pattern = "SAMPLes:MAX?", .callback = SAMPLES_Max_Get,},
+
+    // Get whether data is sent in Run-Length-Encoded (RLE) tuples, or raw samples
+    {.pattern = "MODE?", .callback = MODE_Get,},
 
     // Action settings
     {.pattern = "RUN", .callback = RUN_Execute,},

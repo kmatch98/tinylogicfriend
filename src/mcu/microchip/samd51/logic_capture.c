@@ -6,13 +6,25 @@
 #include "bsp/board.h"
 #include "logic_capture.h"
 #include "instrument_constants.h"
+#include "tlf_board.h"
 
-uint16_t timestamps[MEASURE_BUFFER_SIZE];
-uint16_t values[MEASURE_BUFFER_SIZE];
+#ifdef BOARD_NEOPIXEL_PIN
+#include "neopixel.h"
+#endif
+
+// TinyLogicFriend logic_capture functions
+// for Cortex M4 series - ATMEL/SAMD
+
+// TLF_USBTMC_TX_BUFSIZE defined in tlf_board.h
+bool RLE_mode = true; // The Cortex M4 TinyLogicFriend is currently written using Run Length Encoding
+
+uint16_t timestamps[TLF_USBTMC_TX_BUFSIZE];
+uint16_t values[TLF_USBTMC_TX_BUFSIZE];
 uint16_t measure_count=0; // number of samples that were measured
 
 bool running = false;
 bool finished = false;
+
 
 // // // //   Tell linker to store these functions in RAM
 ///////////// This didn't seem to have any performance improvement on Cortex M4
@@ -26,6 +38,7 @@ void EIC_Handler(void) {
     uint16_t const value = EIC->PINSTATE.reg;
 
     TC0->COUNT16.CTRLBSET.reg = TC_CTRLBSET_CMD_READSYNC;
+    // board_led_write(0);
 
     if (measure_count < samples) {
 
@@ -35,9 +48,8 @@ void EIC_Handler(void) {
 
         timestamps[measure_count] = TC0->COUNT16.COUNT.reg;
         values[measure_count]     = value;
-
         measure_count++;
-
+        // board_led_write(0);
         return;
     }
 
@@ -45,7 +57,6 @@ void EIC_Handler(void) {
     return;
 
 }
-
 
 void EIC_0_Handler(void) { EIC_Handler(); }
 void EIC_1_Handler(void) { EIC_Handler(); }
@@ -77,7 +88,6 @@ void TC0_Handler(void) {
 
 }
 
-
 void logic_capture_init(void) {
     // Connect the APB bus.
     MCLK->APBAMASK.reg |= MCLK_APBAMASK_EIC | MCLK_APBAMASK_TC0;
@@ -89,9 +99,13 @@ void logic_capture_init(void) {
 
 void logic_capture_start(void) {
 
+#ifdef BOARD_NEOPIXEL_PIN
+    RGBLED_set_color(0x00FF00);
+#endif
+
     // setup state variables and counters
 
-    send_buffer_counter = 0; // clear counter for number of samples sent
+    // send_buffer_counter = 0; // clear counter for number of samples sent
     measure_count = 0; // reset the measurement counter
     running = true;
     finished = false;
@@ -131,11 +145,11 @@ void logic_capture_start(void) {
     EIC->CTRLA.reg = EIC_CTRLA_ENABLE;
     while (EIC->SYNCBUSY.reg & EIC_SYNCBUSY_ENABLE);
 
-
     // Use TC0 to timestamp the pin change.
     TC0->COUNT16.CTRLA.reg = TC_CTRLA_MODE_COUNT16 | TC_CTRLA_ENABLE;
 
     TC0->COUNT16.INTENSET.reg = TC_INTFLAG_OVF;
+    // TC0->COUNT16.COUNT.reg = 0;
 
     // store the initial timestamp
     timestamps[0] = 0;
@@ -148,6 +162,8 @@ void logic_capture_start(void) {
         NVIC_EnableIRQ(eic_irq);
     }
     TC0->COUNT16.CTRLBSET.reg = TC_CTRLBSET_CMD_RETRIGGER;
+
+
 }
 
 void logic_capture_stop(void) {
@@ -158,9 +174,12 @@ void logic_capture_stop(void) {
     EIC->CTRLA.bit.ENABLE = false;
     TC0->COUNT32.CTRLA.bit.ENABLE = false;
 
-    flag_reset_send_buffer_counter(); // reset the counter, indicating that no data has been sent from the current buffer
     running = false;
     finished = true;
+
+#ifdef BOARD_NEOPIXEL_PIN
+    RGBLED_set_color(0x000000);
+#endif
 
 }
 
